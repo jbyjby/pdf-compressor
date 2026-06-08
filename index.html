@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PDF 압축기</title>
+<title>PDF · 이미지 압축기</title>
 <style>
   :root {
     --accent: #4f46e5;
@@ -23,11 +23,25 @@
   }
   .wrap { width: 100%; max-width: 600px; }
   h1 { font-size: 24px; margin: 0 0 4px; }
-  .sub { color: var(--muted); font-size: 14px; margin: 0 0 24px; }
+  .sub { color: var(--muted); font-size: 14px; margin: 0 0 20px; }
+
+  /* 탭 */
+  .tabs { display: flex; gap: 6px; margin-bottom: 16px; }
+  .tab {
+    flex: 1; padding: 12px; text-align: center; cursor: pointer;
+    border: 1px solid var(--border); border-radius: 10px; background: var(--card);
+    font-weight: 600; font-size: 15px; color: var(--muted); transition: all .15s;
+  }
+  .tab:hover { border-color: var(--accent); }
+  .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
   .card {
     background: var(--card); border: 1px solid var(--border);
     border-radius: 14px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,.05);
   }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
   .drop {
     border: 2px dashed var(--border); border-radius: 12px;
     padding: 28px 20px; text-align: center; cursor: pointer;
@@ -43,13 +57,8 @@
     display: flex; justify-content: space-between; align-items: center;
     font-size: 13px; color: var(--muted); margin-bottom: 6px;
   }
-  .filelist .head button {
-    background: none; border: 0; color: var(--accent); cursor: pointer; font-size: 13px;
-  }
-  .items {
-    max-height: 240px; overflow-y: auto; border: 1px solid var(--border);
-    border-radius: 8px;
-  }
+  .filelist .head button { background: none; border: 0; color: var(--accent); cursor: pointer; font-size: 13px; }
+  .items { max-height: 240px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
   .item {
     display: flex; align-items: center; gap: 10px; padding: 10px 12px;
     border-bottom: 1px solid var(--border); font-size: 14px;
@@ -111,62 +120,93 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>📄 PDF 압축기</h1>
-  <p class="sub">여러 파일을 한 번에! 브라우저 안에서 처리되어 인터넷에 업로드되지 않아요.</p>
+  <h1>🗜️ 압축기</h1>
+  <p class="sub">PDF와 이미지를 여러 개 한 번에! 모든 처리는 브라우저 안에서 — 업로드되지 않아요.</p>
 
-  <div class="card">
-    <div class="drop" id="drop">
-      <div class="icon">⬆️</div>
-      <p><b>클릭하거나 PDF를 끌어다 놓으세요</b></p>
-      <p>여러 개를 한꺼번에 선택할 수 있습니다</p>
-    </div>
-    <input type="file" id="fileInput" accept="application/pdf" multiple hidden>
-
-    <div class="filelist" id="filelist">
-      <div class="head">
-        <span id="fileCount">0개 파일</span>
-        <button id="clearBtn">전체 비우기</button>
-      </div>
-      <div class="items" id="items"></div>
-    </div>
-
-    <div class="field">
-      <label>압축 강도</label>
-      <div class="opts" id="opts">
-        <div class="opt" data-scale="1.5" data-q="0.82">
-          <div class="t">낮음</div><div class="d">고화질 유지</div>
-        </div>
-        <div class="opt active" data-scale="1.1" data-q="0.65">
-          <div class="t">보통</div><div class="d">권장</div>
-        </div>
-        <div class="opt" data-scale="0.8" data-q="0.5">
-          <div class="t">높음</div><div class="d">용량 최소화</div>
-        </div>
-      </div>
-    </div>
-
-    <button class="go" id="goBtn" disabled>전체 압축 시작</button>
-
-    <div class="progress-wrap" id="progressWrap">
-      <div class="bar"><div id="barFill"></div></div>
-      <div class="progress-text" id="progressText">준비 중...</div>
-    </div>
-
-    <div class="result" id="result">
-      <h3>✅ 압축 완료!</h3>
-      <div class="stats">
-        <div class="stat"><div class="v" id="origSize">-</div><div class="l">전체 원본</div></div>
-        <div class="stat"><div class="v" id="newSize">-</div><div class="l">전체 압축본</div></div>
-        <div class="stat save"><div class="v" id="saved">-</div><div class="l">절감률</div></div>
-      </div>
-      <button class="dl" id="zipBtn">⬇️ 전체 ZIP으로 다운로드</button>
-      <div id="indivLinks" style="margin-top:6px;"></div>
-    </div>
-
-    <div class="err" id="err"></div>
+  <div class="tabs">
+    <div class="tab active" data-tab="pdf">📄 PDF 압축</div>
+    <div class="tab" data-tab="img">🖼️ 이미지 압축</div>
   </div>
 
-  <footer>PDF.js + jsPDF · 모든 처리는 브라우저 안에서 이루어집니다</footer>
+  <div class="card">
+    <!-- ───────── PDF 패널 ───────── -->
+    <div class="panel active" id="panel-pdf">
+      <div class="drop" id="pdf-drop">
+        <div class="icon">⬆️</div>
+        <p><b>클릭하거나 PDF를 끌어다 놓으세요</b></p>
+        <p>여러 개를 한꺼번에 선택할 수 있습니다</p>
+      </div>
+      <input type="file" id="pdf-input" accept="application/pdf" multiple hidden>
+      <div class="filelist" id="pdf-filelist">
+        <div class="head"><span id="pdf-count">0개 파일</span><button data-clear="pdf">전체 비우기</button></div>
+        <div class="items" id="pdf-items"></div>
+      </div>
+      <div class="field">
+        <label>압축 강도</label>
+        <div class="opts" id="pdf-opts">
+          <div class="opt" data-scale="1.5" data-q="0.82"><div class="t">낮음</div><div class="d">고화질 유지</div></div>
+          <div class="opt active" data-scale="1.1" data-q="0.65"><div class="t">보통</div><div class="d">권장</div></div>
+          <div class="opt" data-scale="0.8" data-q="0.5"><div class="t">높음</div><div class="d">용량 최소화</div></div>
+        </div>
+      </div>
+      <button class="go" id="pdf-go" disabled>전체 압축 시작</button>
+      <div class="progress-wrap" id="pdf-progressWrap">
+        <div class="bar"><div id="pdf-barFill"></div></div>
+        <div class="progress-text" id="pdf-progressText">준비 중...</div>
+      </div>
+      <div class="result" id="pdf-result">
+        <h3>✅ 압축 완료!</h3>
+        <div class="stats">
+          <div class="stat"><div class="v" id="pdf-origSize">-</div><div class="l">전체 원본</div></div>
+          <div class="stat"><div class="v" id="pdf-newSize">-</div><div class="l">전체 압축본</div></div>
+          <div class="stat save"><div class="v" id="pdf-saved">-</div><div class="l">절감률</div></div>
+        </div>
+        <button class="dl" id="pdf-zipBtn">⬇️ 전체 ZIP으로 다운로드</button>
+        <div id="pdf-indivLinks" style="margin-top:6px;"></div>
+      </div>
+      <div class="err" id="pdf-err"></div>
+    </div>
+
+    <!-- ───────── 이미지 패널 ───────── -->
+    <div class="panel" id="panel-img">
+      <div class="drop" id="img-drop">
+        <div class="icon">⬆️</div>
+        <p><b>클릭하거나 이미지를 끌어다 놓으세요</b></p>
+        <p>JPG · PNG · WebP · GIF, 여러 개 가능</p>
+      </div>
+      <input type="file" id="img-input" accept="image/*" multiple hidden>
+      <div class="filelist" id="img-filelist">
+        <div class="head"><span id="img-count">0개 파일</span><button data-clear="img">전체 비우기</button></div>
+        <div class="items" id="img-items"></div>
+      </div>
+      <div class="field">
+        <label>압축 강도</label>
+        <div class="opts" id="img-opts">
+          <div class="opt" data-maxdim="2400" data-q="0.85"><div class="t">낮음</div><div class="d">고화질 유지</div></div>
+          <div class="opt active" data-maxdim="1600" data-q="0.7"><div class="t">보통</div><div class="d">권장</div></div>
+          <div class="opt" data-maxdim="1000" data-q="0.55"><div class="t">높음</div><div class="d">용량 최소화</div></div>
+        </div>
+      </div>
+      <button class="go" id="img-go" disabled>전체 압축 시작</button>
+      <div class="progress-wrap" id="img-progressWrap">
+        <div class="bar"><div id="img-barFill"></div></div>
+        <div class="progress-text" id="img-progressText">준비 중...</div>
+      </div>
+      <div class="result" id="img-result">
+        <h3>✅ 압축 완료!</h3>
+        <div class="stats">
+          <div class="stat"><div class="v" id="img-origSize">-</div><div class="l">전체 원본</div></div>
+          <div class="stat"><div class="v" id="img-newSize">-</div><div class="l">전체 압축본</div></div>
+          <div class="stat save"><div class="v" id="img-saved">-</div><div class="l">절감률</div></div>
+        </div>
+        <button class="dl" id="img-zipBtn">⬇️ 전체 ZIP으로 다운로드</button>
+        <div id="img-indivLinks" style="margin-top:6px;"></div>
+      </div>
+      <div class="err" id="img-err"></div>
+    </div>
+  </div>
+
+  <footer>PDF.js · jsPDF · JSZip · 모든 처리는 브라우저 안에서 이루어집니다</footer>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -176,235 +216,274 @@
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
-const drop = document.getElementById("drop");
-const fileInput = document.getElementById("fileInput");
-const filelist = document.getElementById("filelist");
-const itemsEl = document.getElementById("items");
-const fileCount = document.getElementById("fileCount");
-const clearBtn = document.getElementById("clearBtn");
-const goBtn = document.getElementById("goBtn");
-const opts = document.getElementById("opts");
-const progressWrap = document.getElementById("progressWrap");
-const barFill = document.getElementById("barFill");
-const progressText = document.getElementById("progressText");
-const result = document.getElementById("result");
-const errBox = document.getElementById("err");
-const zipBtn = document.getElementById("zipBtn");
-const indivLinks = document.getElementById("indivLinks");
-
-let files = [];          // { id, file, status, blob, newSize, name }
-let nextId = 1;
-let scale = 1.1, quality = 0.65;
-let running = false;
-
 function humanSize(bytes) {
   const u = ["B", "KB", "MB", "GB"];
   let i = 0;
   while (bytes >= 1024 && i < u.length - 1) { bytes /= 1024; i++; }
   return bytes.toFixed(1) + " " + u[i];
 }
+const $ = id => document.getElementById(id);
 
-// 강도 선택
-opts.querySelectorAll(".opt").forEach(el => {
-  el.addEventListener("click", () => {
-    if (running) return;
-    opts.querySelector(".active").classList.remove("active");
-    el.classList.add("active");
-    scale = parseFloat(el.dataset.scale);
-    quality = parseFloat(el.dataset.q);
+// 탭 전환
+document.querySelectorAll(".tab").forEach(t => {
+  t.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+    document.querySelectorAll(".panel").forEach(x => x.classList.remove("active"));
+    t.classList.add("active");
+    $("panel-" + t.dataset.tab).classList.add("active");
   });
 });
 
-// 파일 입력
-drop.addEventListener("click", () => fileInput.click());
-fileInput.addEventListener("change", e => { addFiles(e.target.files); fileInput.value = ""; });
-["dragover", "dragenter"].forEach(ev =>
-  drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
-["dragleave", "drop"].forEach(ev =>
-  drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
-drop.addEventListener("drop", e => { if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files); });
+/**
+ * 압축 패널 공통 동작을 한 번에 묶는 팩토리.
+ * compressOne(file, opts, onProgress) -> Promise<{blob, name}>
+ */
+function createCompressor({ prefix, accept, compressOne, zipName }) {
+  const drop = $(prefix + "-drop");
+  const input = $(prefix + "-input");
+  const filelist = $(prefix + "-filelist");
+  const itemsEl = $(prefix + "-items");
+  const countEl = $(prefix + "-count");
+  const optsEl = $(prefix + "-opts");
+  const goBtn = $(prefix + "-go");
+  const progressWrap = $(prefix + "-progressWrap");
+  const barFill = $(prefix + "-barFill");
+  const progressText = $(prefix + "-progressText");
+  const result = $(prefix + "-result");
+  const errBox = $(prefix + "-err");
+  const zipBtn = $(prefix + "-zipBtn");
+  const indivLinks = $(prefix + "-indivLinks");
 
-clearBtn.addEventListener("click", () => { if (!running) { files = []; render(); } });
+  let files = [];     // { id, file, status, blob, outName, newSize, name }
+  let nextId = 1;
+  let opts = {};
+  let running = false;
 
-function addFiles(fileList) {
-  for (const f of fileList) {
-    const isPdf = f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf");
-    if (!isPdf) continue;
-    // 같은 이름+크기 중복 방지
-    if (files.some(x => x.name === f.name && x.file.size === f.size)) continue;
-    files.push({ id: nextId++, file: f, status: "대기", blob: null, newSize: 0, name: f.name });
-  }
-  render();
-}
+  // 강도 옵션 읽기
+  function readOpts(el) { opts = { ...el.dataset }; }
+  readOpts(optsEl.querySelector(".opt.active"));
+  optsEl.querySelectorAll(".opt").forEach(el => {
+    el.addEventListener("click", () => {
+      if (running) return;
+      optsEl.querySelector(".active").classList.remove("active");
+      el.classList.add("active");
+      readOpts(el);
+    });
+  });
 
-function removeFile(id) {
-  if (running) return;
-  files = files.filter(x => x.id !== id);
-  render();
-}
+  // 파일 입력
+  drop.addEventListener("click", () => input.click());
+  input.addEventListener("change", e => { addFiles(e.target.files); input.value = ""; });
+  ["dragover", "dragenter"].forEach(ev =>
+    drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+  ["dragleave", "drop"].forEach(ev =>
+    drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+  drop.addEventListener("drop", e => { if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files); });
 
-function render() {
-  filelist.style.display = files.length ? "block" : "none";
-  fileCount.textContent = files.length + "개 파일";
-  goBtn.disabled = files.length === 0 || running;
-  itemsEl.innerHTML = "";
-  for (const f of files) {
-    const row = document.createElement("div");
-    row.className = "item" + (f.status === "처리 중" ? " busy" : "");
-    let metaCls = "meta", metaTxt;
-    if (f.status === "완료") {
-      metaCls += " done";
-      metaTxt = `${humanSize(f.file.size)} → ${humanSize(f.newSize)}`;
-    } else if (f.status === "실패") {
-      metaCls += " err"; metaTxt = "실패";
-    } else if (f.status === "처리 중") {
-      metaTxt = "처리 중...";
-    } else {
-      metaTxt = humanSize(f.file.size);
+  function addFiles(list) {
+    for (const f of list) {
+      if (!accept(f)) continue;
+      if (files.some(x => x.name === f.name && x.file.size === f.size)) continue;
+      files.push({ id: nextId++, file: f, status: "대기", blob: null, outName: "", newSize: 0, name: f.name });
     }
-    row.innerHTML =
-      `<span class="name" title="${f.name}">📎 ${f.name}</span>` +
-      `<span class="${metaCls}">${metaTxt}</span>`;
-    if (!running) {
-      const x = document.createElement("button");
-      x.className = "x"; x.textContent = "✕";
-      x.onclick = () => removeFile(f.id);
-      row.appendChild(x);
-    }
-    itemsEl.appendChild(row);
+    render();
   }
+  function removeFile(id) { if (!running) { files = files.filter(x => x.id !== id); render(); } }
+
+  function render() {
+    filelist.style.display = files.length ? "block" : "none";
+    countEl.textContent = files.length + "개 파일";
+    goBtn.disabled = files.length === 0 || running;
+    itemsEl.innerHTML = "";
+    for (const f of files) {
+      const row = document.createElement("div");
+      row.className = "item" + (f.status === "처리 중" ? " busy" : "");
+      let cls = "meta", txt;
+      if (f.status === "완료") { cls += " done"; txt = `${humanSize(f.file.size)} → ${humanSize(f.newSize)}`; }
+      else if (f.status === "실패") { cls += " err"; txt = "실패"; }
+      else if (f.status === "처리 중") { txt = "처리 중..."; }
+      else { txt = humanSize(f.file.size); }
+      row.innerHTML = `<span class="name" title="${f.name}">📎 ${f.name}</span><span class="${cls}">${txt}</span>`;
+      if (!running) {
+        const x = document.createElement("button");
+        x.className = "x"; x.textContent = "✕";
+        x.onclick = () => removeFile(f.id);
+        row.appendChild(x);
+      }
+      itemsEl.appendChild(row);
+    }
+  }
+
+  function showError(msg) { errBox.style.display = "block"; errBox.textContent = "⚠️ " + msg; }
+  function setProgress(pct, text) { barFill.style.width = pct + "%"; progressText.textContent = text; }
+
+  document.querySelector(`[data-clear="${prefix}"]`)
+    .addEventListener("click", () => { if (!running) { files = []; render(); } });
+
+  goBtn.addEventListener("click", run);
+
+  async function run() {
+    if (!files.length || running) return;
+    running = true;
+    errBox.style.display = "none";
+    result.style.display = "none";
+    goBtn.disabled = true;
+    progressWrap.style.display = "block";
+    render();
+
+    let totalIn = 0, totalOut = 0, ok = 0, fail = 0;
+    const n = files.length;
+
+    for (let idx = 0; idx < n; idx++) {
+      const f = files[idx];
+      f.status = "처리 중"; render();
+      try {
+        const { blob, name } = await compressOne(f.file, opts, (p, tp) => {
+          const extra = tp > 1 ? ` — ${p}/${tp}` : "";
+          setProgress((idx + (tp ? p / tp : 1)) / n * 100, `[${idx + 1}/${n}] ${f.name}${extra}`);
+        });
+        f.blob = blob; f.outName = name; f.newSize = blob.size; f.status = "완료";
+        totalIn += f.file.size; totalOut += blob.size; ok++;
+      } catch (e) {
+        f.status = "실패"; fail++;
+      }
+      render();
+    }
+
+    setProgress(100, "마무리 중...");
+    progressWrap.style.display = "none";
+
+    const ratio = totalIn ? (1 - totalOut / totalIn) * 100 : 0;
+    $(prefix + "-origSize").textContent = humanSize(totalIn);
+    $(prefix + "-newSize").textContent = humanSize(totalOut);
+    $(prefix + "-saved").textContent = (ratio >= 0 ? ratio.toFixed(1) : "0") + "%";
+
+    indivLinks.innerHTML = "";
+    for (const f of files) {
+      if (f.status !== "완료") continue;
+      const a = document.createElement("a");
+      a.className = "dl";
+      a.style.background = "#6b7280"; a.style.fontSize = "13px"; a.style.padding = "8px";
+      a.href = URL.createObjectURL(f.blob);
+      a.download = f.outName;
+      a.textContent = "⬇️ " + f.outName;
+      indivLinks.appendChild(a);
+    }
+
+    zipBtn.style.display = ok > 1 ? "block" : "none";
+    result.style.display = "block";
+    if (fail) showError(`${fail}개 파일 압축에 실패했습니다.`);
+    if (ok && totalOut >= totalIn) showError("이미 최적화되어 더 작아지지 않은 파일이 있습니다. 강도를 높여보세요.");
+
+    running = false;
+    goBtn.disabled = false;
+    render();
+  }
+
+  zipBtn.addEventListener("click", async () => {
+    zipBtn.disabled = true; zipBtn.textContent = "ZIP 생성 중...";
+    try {
+      const zip = new JSZip();
+      for (const f of files) if (f.status === "완료") zip.file(f.outName, f.blob);
+      const content = await zip.generateAsync({ type: "blob" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(content);
+      a.download = zipName;
+      a.click();
+    } catch (e) {
+      showError("ZIP 생성 실패: " + (e.message || e));
+    } finally {
+      zipBtn.disabled = false; zipBtn.textContent = "⬇️ 전체 ZIP으로 다운로드";
+    }
+  });
 }
 
-function showError(msg) { errBox.style.display = "block"; errBox.textContent = "⚠️ " + msg; }
-
-goBtn.addEventListener("click", compressAll);
-
-// 단일 PDF 압축 → Blob 반환
-async function compressOne(file, onPage) {
+// ───────── PDF 압축 로직 ─────────
+async function compressPdf(file, opts, onProgress) {
+  const scale = parseFloat(opts.scale), quality = parseFloat(opts.q);
   const buf = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
   const { jsPDF } = window.jspdf;
   let out = null;
-
   for (let i = 1; i <= pdf.numPages; i++) {
-    if (onPage) onPage(i, pdf.numPages);
+    onProgress(i, pdf.numPages);
     const page = await pdf.getPage(i);
     const viewport = page.getViewport({ scale });
     const canvas = document.createElement("canvas");
     canvas.width = Math.max(1, Math.floor(viewport.width));
     canvas.height = Math.max(1, Math.floor(viewport.height));
     const ctx = canvas.getContext("2d");
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
     await page.render({ canvasContext: ctx, viewport }).promise;
-
     const imgData = canvas.toDataURL("image/jpeg", quality);
-    const wPt = viewport.width / scale;
-    const hPt = viewport.height / scale;
+    const wPt = viewport.width / scale, hPt = viewport.height / scale;
     const orient = wPt > hPt ? "l" : "p";
     if (i === 1) out = new jsPDF({ orientation: orient, unit: "pt", format: [wPt, hPt] });
     else out.addPage([wPt, hPt], orient);
     out.addImage(imgData, "JPEG", 0, 0, wPt, hPt);
     await new Promise(r => setTimeout(r, 0));
   }
-  return out.output("blob");
+  const base = file.name.replace(/\.pdf$/i, "");
+  return { blob: out.output("blob"), name: base + "_compressed.pdf" };
 }
 
-async function compressAll() {
-  if (!files.length || running) return;
-  running = true;
-  errBox.style.display = "none";
-  result.style.display = "none";
-  goBtn.disabled = true;
-  progressWrap.style.display = "block";
-  render();
+// ───────── 이미지 압축 로직 ─────────
+function loadImage(src) {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => res(img);
+    img.onerror = () => rej(new Error("이미지를 읽을 수 없습니다"));
+    img.src = src;
+  });
+}
+async function compressImage(file, opts, onProgress) {
+  onProgress(0, 1);
+  const maxDim = parseFloat(opts.maxdim), quality = parseFloat(opts.q);
+  const url = URL.createObjectURL(file);
+  let img;
+  try { img = await loadImage(url); } finally { URL.revokeObjectURL(url); }
 
-  let totalIn = 0, totalOut = 0, ok = 0, fail = 0;
-  const n = files.length;
+  const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+  const w = Math.max(1, Math.round(img.width * scale));
+  const h = Math.max(1, Math.round(img.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext("2d");
 
-  for (let idx = 0; idx < n; idx++) {
-    const f = files[idx];
-    f.status = "처리 중";
-    render();
-    try {
-      const blob = await compressOne(f.file, (p, tp) => {
-        setProgress((idx + p / tp) / n * 100,
-          `[${idx + 1}/${n}] ${f.name} — ${p}/${tp} 페이지`);
-      });
-      f.blob = blob;
-      f.newSize = blob.size;
-      f.status = "완료";
-      totalIn += f.file.size;
-      totalOut += blob.size;
-      ok++;
-    } catch (e) {
-      f.status = "실패";
-      fail++;
-    }
-    render();
+  // PNG/WebP/GIF는 투명도 유지를 위해 WebP로, 그 외엔 JPEG로 출력
+  const src = (file.type || "").toLowerCase();
+  const keepAlpha = src.includes("png") || src.includes("webp") || src.includes("gif");
+  let outType = keepAlpha ? "image/webp" : "image/jpeg";
+  let outExt = keepAlpha ? "webp" : "jpg";
+
+  if (outType === "image/jpeg") { ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, w, h); }
+  ctx.drawImage(img, 0, 0, w, h);
+
+  let blob = await new Promise(r => canvas.toBlob(r, outType, quality));
+  // WebP 미지원 브라우저 대비 JPEG 폴백
+  if (!blob) {
+    outType = "image/jpeg"; outExt = "jpg";
+    ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, w, h); ctx.drawImage(img, 0, 0, w, h);
+    blob = await new Promise(r => canvas.toBlob(r, "image/jpeg", quality));
   }
-
-  setProgress(100, "마무리 중...");
-  progressWrap.style.display = "none";
-
-  // 결과 요약
-  const ratio = totalIn ? (1 - totalOut / totalIn) * 100 : 0;
-  document.getElementById("origSize").textContent = humanSize(totalIn);
-  document.getElementById("newSize").textContent = humanSize(totalOut);
-  document.getElementById("saved").textContent = (ratio >= 0 ? ratio.toFixed(1) : "0") + "%";
-
-  // 개별 다운로드 링크
-  indivLinks.innerHTML = "";
-  for (const f of files) {
-    if (f.status !== "완료") continue;
-    const a = document.createElement("a");
-    a.className = "dl";
-    a.style.background = "#6b7280";
-    a.style.fontSize = "13px";
-    a.style.padding = "8px";
-    a.href = URL.createObjectURL(f.blob);
-    a.download = f.name.replace(/\.pdf$/i, "") + "_compressed.pdf";
-    a.textContent = "⬇️ " + f.name;
-    indivLinks.appendChild(a);
-  }
-
-  zipBtn.style.display = ok > 1 ? "block" : "none";
-  result.style.display = "block";
-  if (fail) showError(`${fail}개 파일 압축에 실패했습니다.`);
-
-  running = false;
-  goBtn.disabled = false;
-  render();
+  onProgress(1, 1);
+  const base = file.name.replace(/\.[^.]+$/, "");
+  return { blob, name: base + "_compressed." + outExt };
 }
 
-// 전체 ZIP 다운로드
-zipBtn.addEventListener("click", async () => {
-  zipBtn.disabled = true;
-  zipBtn.textContent = "ZIP 생성 중...";
-  try {
-    const zip = new JSZip();
-    for (const f of files) {
-      if (f.status !== "완료") continue;
-      const fname = f.name.replace(/\.pdf$/i, "") + "_compressed.pdf";
-      zip.file(fname, f.blob);
-    }
-    const content = await zip.generateAsync({ type: "blob" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(content);
-    a.download = "compressed_pdfs.zip";
-    a.click();
-  } catch (e) {
-    showError("ZIP 생성 실패: " + (e.message || e));
-  } finally {
-    zipBtn.disabled = false;
-    zipBtn.textContent = "⬇️ 전체 ZIP으로 다운로드";
-  }
+// 패널 활성화
+createCompressor({
+  prefix: "pdf",
+  accept: f => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf"),
+  compressOne: compressPdf,
+  zipName: "compressed_pdfs.zip",
 });
-
-function setProgress(pct, text) {
-  barFill.style.width = pct + "%";
-  progressText.textContent = text;
-}
+createCompressor({
+  prefix: "img",
+  accept: f => (f.type || "").startsWith("image/") || /\.(jpe?g|png|webp|gif|bmp)$/i.test(f.name),
+  compressOne: compressImage,
+  zipName: "compressed_images.zip",
+});
 </script>
 </body>
 </html>
