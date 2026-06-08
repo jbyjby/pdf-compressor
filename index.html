@@ -258,6 +258,10 @@ function createCompressor({ prefix, accept, compressOne, zipName, concurrency = 
   let nextId = 1;
   let opts = {};
   let running = false;
+  let objectUrls = [];   // 만든 blob URL 추적 → 재사용 시 정리(메모리 누수 방지)
+
+  function trackUrl(u) { objectUrls.push(u); return u; }
+  function revokeUrls() { objectUrls.forEach(u => URL.revokeObjectURL(u)); objectUrls = []; }
 
   // 강도 옵션 읽기
   function readOpts(el) { opts = { ...el.dataset }; }
@@ -318,13 +322,14 @@ function createCompressor({ prefix, accept, compressOne, zipName, concurrency = 
   function setProgress(pct, text) { barFill.style.width = pct + "%"; progressText.textContent = text; }
 
   document.querySelector(`[data-clear="${prefix}"]`)
-    .addEventListener("click", () => { if (!running) { files = []; render(); } });
+    .addEventListener("click", () => { if (!running) { revokeUrls(); files = []; result.style.display = "none"; render(); } });
 
   goBtn.addEventListener("click", run);
 
   async function run() {
     if (!files.length || running) return;
     running = true;
+    revokeUrls();                  // 이전 실행에서 만든 blob URL 정리
     errBox.style.display = "none";
     result.style.display = "none";
     goBtn.disabled = true;
@@ -381,7 +386,7 @@ function createCompressor({ prefix, accept, compressOne, zipName, concurrency = 
       const a = document.createElement("a");
       a.className = "dl";
       a.style.background = "#6b7280"; a.style.fontSize = "13px"; a.style.padding = "8px";
-      a.href = URL.createObjectURL(f.blob);
+      a.href = trackUrl(URL.createObjectURL(f.blob));
       a.download = f.outName;
       a.textContent = "⬇️ " + f.outName;
       indivLinks.appendChild(a);
@@ -404,9 +409,11 @@ function createCompressor({ prefix, accept, compressOne, zipName, concurrency = 
       for (const f of files) if (f.status === "완료") zip.file(f.outName, f.blob);
       const content = await zip.generateAsync({ type: "blob" });
       const a = document.createElement("a");
-      a.href = URL.createObjectURL(content);
+      const url = URL.createObjectURL(content);
+      a.href = url;
       a.download = zipName;
       a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);  // 다운로드 후 정리
     } catch (e) {
       showError("ZIP 생성 실패: " + (e.message || e));
     } finally {
@@ -419,30 +426,37 @@ function createCompressor({ prefix, accept, compressOne, zipName, concurrency = 
 async function compressPdf(file, opts, onProgress) {
   const scale = parseFloat(opts.scale), quality = parseFloat(opts.q);
   const buf = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  const loadingTask = pdfjsLib.getDocument({ data: buf });
+  const pdf = await loadingTask.promise;
   const { jsPDF } = window.jspdf;
   let out = null;
-  for (let i = 1; i <= pdf.numPages; i++) {
-    onProgress(i, pdf.numPages);
-    const page = await pdf.getPage(i);
-    const viewport = page.getViewport({ scale });
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.floor(viewport.width));
-    canvas.height = Math.max(1, Math.floor(viewport.height));
-    const ctx = canvas.getContext("2d");
-    ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
-    await page.render({ canvasContext: ctx, viewport }).promise;
-    // toDataURL(느린 base64) 대신 toBlob → 바이너리로 바로 전달 (빠르고 메모리 절약)
-    const blob = await new Promise(r => canvas.toBlob(r, "image/jpeg", quality));
-    const bytes = new Uint8Array(await blob.arrayBuffer());
-    const wPt = viewport.width / scale, hPt = viewport.height / scale;
-    const orient = wPt > hPt ? "l" : "p";
-    if (i === 1) out = new jsPDF({ orientation: orient, unit: "pt", format: [wPt, hPt] });
-    else out.addPage([wPt, hPt], orient);
-    out.addImage(bytes, "JPEG", 0, 0, wPt, hPt);
+  try {
+    for (let i = 1; i <= pdf.numPages; i++) {
+      onProgress(i, pdf.numPages);
+      const page = await pdf.getPage(i);
+      const viewport = page.getViewport({ scale });
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.floor(viewport.width));
+      canvas.height = Math.max(1, Math.floor(viewport.height));
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      // toDataURL(느린 base64) 대신 toBlob → 바이너리로 바로 전달 (빠르고 메모리 절약)
+      const blob = await new Promise(r => canvas.toBlob(r, "image/jpeg", quality));
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      const wPt = viewport.width / scale, hPt = viewport.height / scale;
+      const orient = wPt > hPt ? "l" : "p";
+      if (i === 1) out = new jsPDF({ orientation: orient, unit: "pt", format: [wPt, hPt] });
+      else out.addPage([wPt, hPt], orient);
+      out.addImage(bytes, "JPEG", 0, 0, wPt, hPt);
+      page.cleanup();              // 페이지 리소스 해제
+      canvas.width = canvas.height = 0;  // 캔버스 메모리 즉시 반환
+    }
+    const base = file.name.replace(/\.pdf$/i, "");
+    return { blob: out.output("blob"), name: base + "_compressed.pdf" };
+  } finally {
+    await loadingTask.destroy();   // PDF.js 작업용 메모리 해제 (반복 시 누적 방지)
   }
-  const base = file.name.replace(/\.pdf$/i, "");
-  return { blob: out.output("blob"), name: base + "_compressed.pdf" };
 }
 
 // ───────── 이미지 압축 로직 ─────────
