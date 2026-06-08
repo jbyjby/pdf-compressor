@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# 테스트/임시 PDF
+*_compressed.pdf
+sample*.pdf
+test_*.pdf
+out_*.pdf
