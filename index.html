@@ -238,7 +238,7 @@ document.querySelectorAll(".tab").forEach(t => {
  * 압축 패널 공통 동작을 한 번에 묶는 팩토리.
  * compressOne(file, opts, onProgress) -> Promise<{blob, name}>
  */
-function createCompressor({ prefix, accept, compressOne, zipName }) {
+function createCompressor({ prefix, accept, compressOne, zipName, concurrency = 1 }) {
   const drop = $(prefix + "-drop");
   const input = $(prefix + "-input");
   const filelist = $(prefix + "-filelist");
@@ -333,22 +333,39 @@ function createCompressor({ prefix, accept, compressOne, zipName }) {
 
     let totalIn = 0, totalOut = 0, ok = 0, fail = 0;
     const n = files.length;
+    const frac = new Array(n).fill(0);   // 파일별 진행률(0~1)
+    let done = 0;
+    const overall = () => frac.reduce((a, b) => a + b, 0) / n * 100;
 
-    for (let idx = 0; idx < n; idx++) {
-      const f = files[idx];
+    const makeTask = (f, idx) => async () => {
       f.status = "처리 중"; render();
       try {
         const { blob, name } = await compressOne(f.file, opts, (p, tp) => {
-          const extra = tp > 1 ? ` — ${p}/${tp}` : "";
-          setProgress((idx + (tp ? p / tp : 1)) / n * 100, `[${idx + 1}/${n}] ${f.name}${extra}`);
+          frac[idx] = tp ? p / tp : 1;
+          if (concurrency === 1) {
+            const extra = tp > 1 ? ` — ${p}/${tp}` : "";
+            setProgress(overall(), `[${idx + 1}/${n}] ${f.name}${extra}`);
+          } else {
+            setProgress(overall(), `처리 중... ${done}/${n} 완료`);
+          }
         });
         f.blob = blob; f.outName = name; f.newSize = blob.size; f.status = "완료";
         totalIn += f.file.size; totalOut += blob.size; ok++;
       } catch (e) {
         f.status = "실패"; fail++;
       }
+      frac[idx] = 1; done++;
+      setProgress(overall(), `처리 중... ${done}/${n} 완료`);
       render();
-    }
+    };
+
+    // 동시 처리(워커 풀): concurrency개의 작업을 동시에 진행
+    const tasks = files.map(makeTask);
+    let next = 0;
+    const workers = Array.from({ length: Math.min(concurrency, n) }, async () => {
+      while (next < tasks.length) { await tasks[next++](); }
+    });
+    await Promise.all(workers);
 
     setProgress(100, "마무리 중...");
     progressWrap.style.display = "none";
@@ -415,13 +432,14 @@ async function compressPdf(file, opts, onProgress) {
     const ctx = canvas.getContext("2d");
     ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
     await page.render({ canvasContext: ctx, viewport }).promise;
-    const imgData = canvas.toDataURL("image/jpeg", quality);
+    // toDataURL(느린 base64) 대신 toBlob → 바이너리로 바로 전달 (빠르고 메모리 절약)
+    const blob = await new Promise(r => canvas.toBlob(r, "image/jpeg", quality));
+    const bytes = new Uint8Array(await blob.arrayBuffer());
     const wPt = viewport.width / scale, hPt = viewport.height / scale;
     const orient = wPt > hPt ? "l" : "p";
     if (i === 1) out = new jsPDF({ orientation: orient, unit: "pt", format: [wPt, hPt] });
     else out.addPage([wPt, hPt], orient);
-    out.addImage(imgData, "JPEG", 0, 0, wPt, hPt);
-    await new Promise(r => setTimeout(r, 0));
+    out.addImage(bytes, "JPEG", 0, 0, wPt, hPt);
   }
   const base = file.name.replace(/\.pdf$/i, "");
   return { blob: out.output("blob"), name: base + "_compressed.pdf" };
@@ -483,6 +501,7 @@ createCompressor({
   accept: f => (f.type || "").startsWith("image/") || /\.(jpe?g|png|webp|gif|bmp)$/i.test(f.name),
   compressOne: compressImage,
   zipName: "compressed_images.zip",
+  concurrency: 4,   // 이미지는 4장씩 동시 처리
 });
 </script>
 </body>

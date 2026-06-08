@@ -9,6 +9,9 @@ venv/
 Thumbs.db
 .DS_Store
 
+# 로컬 dev 설정
+.claude/
+
 # 테스트/임시 PDF
 *_compressed.pdf
 sample*.pdf
